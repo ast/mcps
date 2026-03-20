@@ -1,0 +1,131 @@
+#+title: smhi-mcp
+#+author: Albin Stigö
+#+options: toc:t
+
+An MCP (Model Context Protocol) server that connects Claude Code to
+the [[https://www.smhi.se/data/sok-oppna-data-i-utforskaren/][SMHI]] (Swedish Meteorological and Hydrological Institute) open
+weather API. It provides hourly forecast data so you know how to dress
+and what to expect for the day.
+
+* Prerequisites
+
+- [[https://www.rust-lang.org/tools/install][Rust]] (stable toolchain)
+
+No API key or account is required — SMHI's forecast data is freely
+available.
+
+* Build & Install
+
+** Build
+
+#+begin_src sh
+  git clone https://github.com/yourname/smhi-mcp
+  cd smhi-mcp
+  cargo build --release
+#+end_src
+
+The binary will be at =target/release/smhi-mcp=.
+
+** Install to PATH
+
+#+begin_src sh
+  cargo install --path .
+#+end_src
+
+This installs =smhi-mcp= to =~/.cargo/bin/=, which should already be
+on your =PATH=.
+
+* Adding to Claude Code
+
+** Quick add (local scope)
+
+#+begin_src sh
+  claude mcp add --transport stdio smhi -- smhi-mcp
+#+end_src
+
+** Project scope (shared with team via =.mcp.json=)
+
+#+begin_src sh
+  claude mcp add --transport stdio --scope project smhi -- smhi-mcp
+#+end_src
+
+** User scope (available in all your projects)
+
+#+begin_src sh
+  claude mcp add --transport stdio --scope user smhi -- smhi-mcp
+#+end_src
+
+** Verify it was added
+
+#+begin_src sh
+  claude mcp list
+  claude mcp get smhi
+#+end_src
+
+** Remove
+
+#+begin_src sh
+  claude mcp remove smhi
+#+end_src
+
+* Using in a Claude Session
+
+Once added, start Claude Code normally and the weather tools will be
+available automatically. Within a session you can check the server
+status with:
+
+#+begin_example
+/mcp
+#+end_example
+
+** Available tools
+
+| Tool           | What it does                                              |
+|----------------+-----------------------------------------------------------|
+| =get_forecast= | Fetch an hourly weather forecast for a lat/lon coordinate |
+
+** Tool parameters
+
+| Parameter | Type    | Required | Description                                         |
+|-----------+---------+----------+-----------------------------------------------------|
+| =lat=     | float   | yes      | Latitude in decimal degrees (e.g. 59.3293)          |
+| =lon=     | float   | yes      | Longitude in decimal degrees (e.g. 18.0686)         |
+| =hours=   | integer | no       | Hours ahead to include (default: 24, max: 240)      |
+
+** Example prompts
+
+#+begin_example
+What's the weather going to be like today in Stockholm?
+#+end_example
+
+#+begin_example
+Should I bring an umbrella? I'm in Gothenburg (lat 57.7089, lon 11.9746).
+#+end_example
+
+#+begin_example
+Give me the next 48 hours of forecast for Malmö (lat 55.6050, lon 13.0038).
+#+end_example
+
+** Example output
+
+#+begin_example
+10:00 UTC: 5.2°C, wind 8.1 m/s NW, rain 1.2 mm/h, humidity 84% — Light rain
+11:00 UTC: 5.8°C, wind 7.4 m/s NW, humidity 80% — Variable cloudiness
+12:00 UTC: 7.1°C, wind 6.0 m/s W, humidity 74% — Nearly clear sky
+#+end_example
+
+* Running tests
+
+#+begin_src sh
+  cargo test
+#+end_src
+
+Integration tests live in =tests/forecast.rs= and cover formatting
+helpers and the full forecast output pipeline without making real
+network requests.
+
+* Security note
+
+=smhi-mcp= only performs outbound HTTPS GET requests to the SMHI open
+data API. It does not execute arbitrary code, write files, or require
+any credentials.

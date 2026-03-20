@@ -1,0 +1,23 @@
+[workspace]
+members = [
+    "emacs-mcp",
+    "notify-mcp",
+    "smhi-mcp",
+]
+resolver = "2"
+
+[workspace.dependencies]
+rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk", features = [
+    "server",
+    "macros",
+    "transport-io",
+    "schemars",
+] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+schemars = "0.8"

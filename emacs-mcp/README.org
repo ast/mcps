@@ -1,0 +1,143 @@
+#+title: emacs-mcp
+#+author: Albin Stigö
+#+options: toc:t
+
+An MCP (Model Context Protocol) server that lets Claude Code interact
+with a running Emacs instance via =emacsclient=.
+
+* Prerequisites
+
+- [[https://www.rust-lang.org/tools/install][Rust]] (stable toolchain)
+- Emacs with =server-start= active (see [[#emacs-setup][Emacs Setup]])
+
+* Emacs Setup
+:PROPERTIES:
+:CUSTOM_ID: emacs-setup
+:END:
+
+The server communicates with Emacs through =emacsclient=, so Emacs
+must be running its built-in server. Add this to your =init.el=:
+
+#+begin_src emacs-lisp
+  (server-start)
+#+end_src
+
+Or start it interactively with =M-x server-start=.
+
+Verify the server is up:
+
+#+begin_src sh
+  emacsclient --eval "(emacs-version)"
+#+end_src
+
+* Build & Install
+
+** Build
+
+#+begin_src sh
+  git clone https://github.com/yourname/emacs-mcp cd emacs-mcp cargo
+  build --release
+#+end_src
+
+The binary will be at =target/release/emacs-mcp=.
+
+** Install to PATH
+
+#+begin_src sh
+  cargo install --path .
+#+end_src
+
+This installs =emacs-mcp= to =~/.cargo/bin/=, which should already be
+on your =PATH=.
+
+* Adding to Claude Code
+
+** Quick add (local scope)
+
+#+begin_src sh
+  claude mcp add --transport stdio emacs -- emacs-mcp
+#+end_src
+
+** Project scope (shared with team via =.mcp.json=)
+
+#+begin_src sh
+  claude mcp add --transport stdio --scope project emacs -- emacs-mcp
+#+end_src
+
+** User scope (available in all your projects)
+
+#+begin_src sh
+  claude mcp add --transport stdio --scope user emacs -- emacs-mcp
+#+end_src
+
+** Verify it was added
+
+#+begin_src sh
+  claude mcp list claude mcp get emacs
+#+end_src
+
+** Remove
+
+#+begin_src sh
+  claude mcp remove emacs
+#+end_src
+
+* Using in a Claude Session
+
+Once added, start Claude Code normally and the Emacs tools will be
+available automatically. Within a session you can check the server
+status with:
+
+#+begin_example
+/mcp
+#+end_example
+
+** Available tools
+
+| Tool                  | What it does                                        |
+|-----------------------+-----------------------------------------------------|
+| =eval_expression=     | Evaluate arbitrary Emacs Lisp and return the result |
+| =list_buffers=        | List the names of all open buffers                  |
+| =get_buffer_content=  | Get the full text of a buffer (current or named)    |
+| =open_file=           | Open a file in Emacs via =find-file=                |
+| =get_cursor_position= | Return point, line, column, and current file path   |
+
+** Example prompts
+
+#+begin_example
+Look at my current Emacs buffer and summarise what the code does.
+#+end_example
+
+#+begin_example
+Evaluate (buffer-list) in Emacs and tell me which buffers are open.
+#+end_example
+
+#+begin_example
+Open ~/src/myproject/main.rs in Emacs.
+#+end_example
+
+* Configuration
+
+By default =emacsclient= connects to the default socket. If you run
+multiple Emacs instances and need to target a specific one, set the
+socket name:
+
+#+begin_src sh
+  claude mcp add --transport stdio --env EMACS_SOCKET_NAME=server2 emacs
+  -- emacs-mcp
+#+end_src
+
+Then update =EmacsClient= initialisation in =src/emacs_server.rs= to
+read that variable:
+
+#+begin_src rust
+  let socket = std::env::var("EMACS_SOCKET_NAME").ok(); let emacs =
+  match socket { Some(name) => EmacsClient::with_socket(name), None =>
+  EmacsClient::new(), };
+#+end_src
+
+* Security note
+
+=eval_expression= can execute arbitrary Emacs Lisp. Only use this
+server in sessions you control and be mindful when prompting Claude to
+evaluate untrusted expressions.
