@@ -1,0 +1,183 @@
+#+title: gcal-mcp
+#+author: Albin Stigö
+#+options: toc:t
+
+An MCP (Model Context Protocol) server that gives Claude Code
+read-only access to your Google Calendar events via private iCal feed
+URLs — no OAuth, no API keys.
+
+* Prerequisites
+
+- [[https://www.rust-lang.org/tools/install][Rust]] (stable toolchain)
+- One or more Google Calendar private iCal URLs (see [[*Getting your iCal URL][Getting your iCal URL]])
+
+* Getting your iCal URL
+
+Google Calendar exposes a secret iCal feed for each calendar that does
+not require authentication.
+
+1. Open [[https://calendar.google.com][Google Calendar]] in your browser.
+2. Click the three-dot menu next to the calendar you want to share,
+   then choose *Settings and sharing*.
+3. Scroll down to the *Integrate calendar* section.
+4. Copy the *Secret address in iCal format* link — it looks like:
+   =https://calendar.google.com/calendar/ical/<id>/private-<key>/basic.ics=
+
+Treat this URL like a password: anyone with it can read your calendar.
+
+* Configuration
+
+=gcal-mcp= reads its configuration from
+=~/.config/gcal-mcp/config.toml= (respecting =$XDG_CONFIG_HOME= if
+set).
+
+** Creating the config file
+
+#+begin_src sh
+  mkdir -p ~/.config/gcal-mcp
+  $EDITOR ~/.config/gcal-mcp/config.toml
+#+end_src
+
+** Config file format
+
+Each calendar gets a =[[calendars]]= entry with a human-readable
+=name= and the secret iCal =url=:
+
+#+begin_src toml
+  [[calendars]]
+  name = "Work"
+  url  = "https://calendar.google.com/calendar/ical/work%40example.com/private-abc123/basic.ics"
+
+  [[calendars]]
+  name = "Personal"
+  url  = "https://calendar.google.com/calendar/ical/personal%40gmail.com/private-def456/basic.ics"
+
+  [[calendars]]
+  name = "Family"
+  url  = "https://calendar.google.com/calendar/ical/family-calendar-id/private-ghi789/basic.ics"
+#+end_src
+
+The =name= is used to label events in the output when more than one
+calendar is configured. It can be anything you like.
+
+* Build & Install
+
+** Build
+
+#+begin_src sh
+  git clone https://github.com/yourname/mcps
+  cd mcps
+  cargo build -p gcal-mcp --release
+#+end_src
+
+The binary will be at =target/release/gcal-mcp=.
+
+** Install to PATH
+
+#+begin_src sh
+  cargo install --path gcal-mcp
+#+end_src
+
+This installs =gcal-mcp= to =~/.cargo/bin/=, which should already be
+on your =PATH=.
+
+* Adding to Claude Code
+
+** Quick add (local scope)
+
+#+begin_src sh
+  claude mcp add --transport stdio gcal -- gcal-mcp
+#+end_src
+
+** User scope (available in all your projects)
+
+#+begin_src sh
+  claude mcp add --transport stdio --scope user gcal -- gcal-mcp
+#+end_src
+
+** Project scope (shared with team via =.mcp.json=)
+
+#+begin_src sh
+  claude mcp add --transport stdio --scope project gcal -- gcal-mcp
+#+end_src
+
+** Verify it was added
+
+#+begin_src sh
+  claude mcp list
+  claude mcp get gcal
+#+end_src
+
+** Remove
+
+#+begin_src sh
+  claude mcp remove gcal
+#+end_src
+
+* Using in a Claude Session
+
+Once added, start Claude Code normally and the calendar tools will be
+available automatically. Within a session you can check the server
+status with:
+
+#+begin_example
+/mcp
+#+end_example
+
+** Available tools
+
+| Tool           | What it does                                               |
+|----------------+------------------------------------------------------------|
+| =list_events=  | List upcoming events from all configured calendars         |
+
+** Tool parameters
+
+| Parameter | Type    | Required | Description                                     |
+|-----------+---------+----------+-------------------------------------------------|
+| =days=    | integer | no       | Days ahead to include (default: 7, max: 90)     |
+
+** Example prompts
+
+#+begin_example
+What's on my calendar this week?
+#+end_example
+
+#+begin_example
+Do I have any meetings today?
+#+end_example
+
+#+begin_example
+What does the next two weeks look like?
+#+end_example
+
+** Example output
+
+#+begin_example
+Monday, March 25
+  09:00 UTC  Standup  (Work)
+  14:00 UTC  Dentist  [City Dental Clinic]  (Personal)
+
+Tuesday, March 26
+  All day    Public Holiday
+  10:00 UTC  Sprint planning  (Work)
+#+end_example
+
+* Running tests
+
+#+begin_src sh
+  cargo test -p gcal-mcp
+#+end_src
+
+* Security note
+
+=gcal-mcp= is read-only by design. It performs outbound HTTPS GET
+requests to fetch your iCal feeds and never modifies calendar data. It
+does not execute arbitrary code or write files.
+
+Your private iCal URLs grant read access to your calendar without any
+login prompt. Keep =~/.config/gcal-mcp/config.toml= readable only by
+your user:
+
+#+begin_src sh
+  chmod 600 ~/.config/gcal-mcp/config.toml
+#+end_src

@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "emacs-mcp",
+    "gcal-mcp",
     "notify-mcp",
     "smhi-mcp",
 ]
