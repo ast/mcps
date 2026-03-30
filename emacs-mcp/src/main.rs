@@ -1,3 +1,8 @@
+//! Entry point for the emacs-mcp server.
+//!
+//! Initialises tracing, creates an [`EmacsServer`], and serves it over
+//! stdio using the MCP transport protocol.
+
 use anyhow::Result;
 use emacs_mcp::emacs_server::EmacsServer;
 use rmcp::{transport::stdio, ServiceExt};

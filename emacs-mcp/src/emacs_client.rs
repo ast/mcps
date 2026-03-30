@@ -10,10 +10,15 @@ pub struct EmacsClient {
 }
 
 impl EmacsClient {
+    /// Create a new client that connects to the default Emacs server socket.
     pub fn new() -> Self {
         Self { socket_name: None }
     }
 
+    /// Create a new client that connects to a specific Emacs server socket.
+    ///
+    /// This is useful when multiple Emacs instances are running, each with its
+    /// own server started via `(server-start)` with a distinct socket name.
     pub fn with_socket(socket_name: impl Into<String>) -> Self {
         Self {
             socket_name: Some(socket_name.into()),

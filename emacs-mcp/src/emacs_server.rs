@@ -9,20 +9,26 @@ use crate::emacs_client::EmacsClient;
 
 // ── Tool parameter structs ────────────────────────────────────────────────────
 
+/// Parameters for the `eval_expression` tool.
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct EvalParams {
+    /// The Emacs Lisp expression to evaluate.
     #[schemars(description = "The Emacs Lisp expression to evaluate")]
     pub expression: String,
 }
 
+/// Parameters for the `get_buffer_content` tool.
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct GetBufferParams {
+    /// Name of the buffer to read. When `None`, the current buffer is used.
     #[schemars(description = "Name of the Emacs buffer. Omit to use the current buffer.")]
     pub buffer_name: Option<String>,
 }
 
+/// Parameters for the `open_file` tool.
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct OpenFileParams {
+    /// Absolute or relative path to the file to open.
     #[schemars(description = "Absolute or relative path of the file to open in Emacs")]
     pub path: String,
 }
@@ -39,8 +45,15 @@ pub struct EmacsServer {
     tool_router: ToolRouter<EmacsServer>,
 }
 
+impl Default for EmacsServer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[tool_router]
 impl EmacsServer {
+    /// Create a new server with a default [`EmacsClient`] and pre-built tool router.
     pub fn new() -> Self {
         Self {
             emacs: EmacsClient::new(),
