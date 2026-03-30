@@ -1,0 +1,76 @@
+#+TITLE: mcps
+#+DESCRIPTION: A collection of MCP servers written in Rust
+
+* Overview
+
+A Rust workspace containing independent [[https://modelcontextprotocol.io/][MCP]] (Model Context Protocol)
+servers. Each server exposes a focused set of tools that LLM clients
+(such as [[https://claude.ai/code][Claude Code]]) can invoke over the standard MCP stdio
+transport.
+
+* Servers
+
+| Server       | Description                                               |
+|--------------+-----------------------------------------------------------|
+| =emacs-mcp=  | Interact with a running Emacs instance via =emacsclient=  |
+| =gcal-mcp=   | Read-only access to Google Calendar events via iCal       |
+| =notify-mcp= | Send Linux desktop notifications via D-Bus (notify-rust)  |
+| =smhi-mcp=   | Fetch Swedish weather forecasts from the SMHI public API  |
+
+* Building
+
+All crates are built with Cargo. Rust edition 2024 is used throughout.
+
+#+begin_src sh
+# Build all servers
+cargo build --release
+
+# Build a single server
+cargo build -p emacs-mcp --release
+#+end_src
+
+* Testing
+
+#+begin_src sh
+# Run all tests
+cargo test
+
+# Run tests for a specific server
+cargo test -p smhi-mcp
+#+end_src
+
+* Linting and formatting
+
+#+begin_src sh
+cargo clippy
+cargo fmt
+#+end_src
+
+* Architecture
+
+Each server follows a three-layer pattern:
+
+1. =main.rs= -- Tokio runtime and tracing setup, stdio transport.
+2. =*_server.rs= -- Implements =ServerHandler= from the =rmcp= SDK;
+   defines MCP tools via =#[tool_router]= / =#[tool]= macros.
+3. =*_client.rs= -- Encapsulates the actual work (subprocess calls,
+   HTTP requests, D-Bus).
+
+* Key dependencies
+
+| Crate         | Purpose                      |
+|---------------+------------------------------|
+| =rmcp=        | Official Rust MCP SDK        |
+| =tokio=       | Async runtime                |
+| =serde=       | Serialization                |
+| =schemars=    | JSON Schema for tool params  |
+| =thiserror=   | Error enum definitions       |
+| =anyhow=      | Error propagation            |
+| =tracing=     | Logging                      |
+| =reqwest=     | HTTP client (smhi, gcal)     |
+| =notify-rust= | D-Bus notifications (notify) |
+| =chrono=      | Date/time (smhi, gcal)       |
+
+* License
+
+See individual crate directories for license information.
