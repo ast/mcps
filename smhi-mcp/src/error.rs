@@ -5,6 +5,6 @@ use thiserror::Error;
 pub enum Error {
     #[error("HTTP request failed: {0}")]
     Http(#[from] reqwest::Error),
-    #[error("parse error: {0}")]
-    Parse(String),
+    #[error("invalid coordinate: {0}")]
+    InvalidCoordinate(String),
 }

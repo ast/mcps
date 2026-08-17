@@ -3,9 +3,17 @@ members = [
     "emacs-mcp",
     "gcal-mcp",
     "notify-mcp",
+    "pdf-mcp",
     "smhi-mcp",
 ]
 resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/ast/mcps"
+authors = ["Albin Stigo <albin.stigo@gmail.com>"]
 
 [workspace.dependencies]
 rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk", features = [
@@ -22,3 +30,10 @@ thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 schemars = "0.8"
+reqwest = { version = "0.12", features = ["json"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+[workspace.lints.clippy]
+needless_return = "warn"
+redundant_clone = "warn"
+unnecessary_wraps = "warn"

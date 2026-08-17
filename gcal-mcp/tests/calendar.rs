@@ -1,17 +1,21 @@
-use gcal_mcp::gcal_client::{CalendarConfig, GcalClient};
+use gcal_mcp::gcal_client::{CalendarConfig, ConfigOutcome, GcalClient};
 use gcal_mcp::gcal_server::format_events;
 
 /// Load calendars from the real config file, skipping the test if it is absent.
 macro_rules! load_calendars {
     () => {{
-        match CalendarConfig::from_config_file() {
-            Ok(cals) if !cals.is_empty() => cals,
-            Ok(_) => {
-                println!("SKIP: config file exists but contains no calendars");
+        match CalendarConfig::load() {
+            Ok(ConfigOutcome::Loaded(cals)) if !cals.is_empty() => cals,
+            Ok(ConfigOutcome::Loaded(_)) => {
+                eprintln!("SKIP: config file exists but contains no calendars");
+                return;
+            }
+            Ok(ConfigOutcome::Missing) => {
+                eprintln!("SKIP: no config file at ~/.config/gcal-mcp/config.toml");
                 return;
             }
             Err(e) => {
-                println!("SKIP: could not load config file: {e}");
+                eprintln!("SKIP: could not load config file: {e}");
                 return;
             }
         }
@@ -21,6 +25,7 @@ macro_rules! load_calendars {
 // ── Config loading ────────────────────────────────────────────────────────────
 
 #[test]
+#[ignore = "requires user config file with calendar URLs"]
 fn config_loads_at_least_one_calendar() {
     let calendars = load_calendars!();
     assert!(!calendars.is_empty());
@@ -37,6 +42,7 @@ fn config_loads_at_least_one_calendar() {
 // ── Live network tests ────────────────────────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "hits the live Google Calendar iCal feed"]
 async fn fetch_returns_ok() {
     let calendars = load_calendars!();
     let client = GcalClient::new();
@@ -46,6 +52,7 @@ async fn fetch_returns_ok() {
 }
 
 #[tokio::test]
+#[ignore = "hits the live Google Calendar iCal feed"]
 async fn fetched_events_have_non_empty_summaries() {
     let calendars = load_calendars!();
     let client = GcalClient::new();
@@ -68,6 +75,7 @@ async fn fetched_events_have_non_empty_summaries() {
 }
 
 #[tokio::test]
+#[ignore = "hits the live Google Calendar iCal feed"]
 async fn fetched_events_are_sorted_by_start_time() {
     let calendars = load_calendars!();
     let client = GcalClient::new();
@@ -88,6 +96,7 @@ async fn fetched_events_are_sorted_by_start_time() {
 }
 
 #[tokio::test]
+#[ignore = "hits the live Google Calendar iCal feed"]
 async fn fetched_events_are_within_requested_window() {
     let calendars = load_calendars!();
     let client = GcalClient::new();
@@ -120,6 +129,7 @@ async fn fetched_events_are_within_requested_window() {
 // ── Formatting integration ────────────────────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "hits the live Google Calendar iCal feed"]
 async fn format_output_is_non_empty_string() {
     let calendars = load_calendars!();
     let client = GcalClient::new();

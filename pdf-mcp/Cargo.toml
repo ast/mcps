@@ -1,11 +1,11 @@
 [package]
-name = "emacs-mcp"
+name = "pdf-mcp"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
-description = "MCP server that interacts with a running Emacs instance via emacsclient"
+description = "MCP server that opens PDFs in sioyek at a specific page or text location"
 
 [dependencies]
 rmcp = { workspace = true }

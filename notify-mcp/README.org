@@ -3,84 +3,26 @@
 #+options: toc:t
 
 An MCP (Model Context Protocol) server that lets Claude Code send
-desktop notifications via =notify-send=, targeting notification
-daemons such as [[https://github.com/emersion/mako][Mako]] or [[https://dunst-project.org/][dunst]].
+desktop notifications via D-Bus, targeting notification daemons such
+as [[https://github.com/emersion/mako][Mako]] or [[https://dunst-project.org/][dunst]].
+
+For building, installing, and registering with Claude Code, see the
+[[file:../README.org][main README]].
 
 * Prerequisites
 
-- [[https://www.rust-lang.org/tools/install][Rust]] (stable toolchain)
-- A running notification daemon (e.g. Mako, dunst)
-- =notify-send= available on your =PATH= (typically from =libnotify=)
+A running notification daemon implementing the freedesktop.org
+notification spec — Mako, dunst, GNOME Shell, KDE Plasma, etc.
+=notify-mcp= talks to it over D-Bus via the [[https://crates.io/crates/notify-rust][notify-rust]] crate, so no
+external =notify-send= binary is required.
 
-Verify =notify-send= is installed:
-
-#+begin_src sh
-  notify-send --version
-#+end_src
-
-* Build & Install
-
-** Build
+Quick sanity check that a daemon is listening:
 
 #+begin_src sh
-  git clone https://github.com/yourname/notify-mcp cd notify-mcp cargo
-  build --release
+  notify-send "Test" "If you see this, notifications work."
 #+end_src
 
-The binary will be at =target/release/notify-mcp=.
-
-** Install to PATH
-
-#+begin_src sh
-  cargo install --path .
-#+end_src
-
-This installs =notify-mcp= to =~/.cargo/bin/=, which should already be
-on your =PATH=.
-
-* Adding to Claude Code
-
-** Quick add (local scope)
-
-#+begin_src sh
-  claude mcp add --transport stdio notify -- notify-mcp
-#+end_src
-
-** Project scope (shared with team via =.mcp.json=)
-
-#+begin_src sh
-  claude mcp add --transport stdio --scope project notify -- notify-mcp
-#+end_src
-
-** User scope (available in all your projects)
-
-#+begin_src sh
-  claude mcp add --transport stdio --scope user notify -- notify-mcp
-#+end_src
-
-** Verify it was added
-
-#+begin_src sh
-  claude mcp list claude mcp get notify
-#+end_src
-
-** Remove
-
-#+begin_src sh
-  claude mcp remove notify
-#+end_src
-
-* Using in a Claude Session
-
-Once added, start Claude Code normally and the notification tools will
-be available automatically. Within a session you can check the server
-status with:
-
-#+begin_example
-/mcp
-#+end_example
-
-** Available tools
+* Available tools
 
 | Tool     | What it does                                                           |
 |----------+------------------------------------------------------------------------|
@@ -94,7 +36,10 @@ status with:
 | =body=    | string | no       | Longer description shown in the notification body |
 | =urgency= | string | no       | =low=, =normal=, or =critical= (default: normal)  |
 
-** Example prompts
+Unknown urgency values are rejected with an error rather than silently
+falling back to =normal=.
+
+* Example prompts
 
 #+begin_example
 When you finish the task, send me a desktop notification.
@@ -110,6 +55,7 @@ Notify me with summary "Build done" and body "All checks passed".
 
 * Security note
 
-=notify-mcp= only spawns =notify-send= subprocesses — it does not
-execute arbitrary code. However, be mindful that notification content
-is visible on-screen and may be logged by your notification daemon.
+=notify-mcp= only sends D-Bus notification messages — it does not
+execute arbitrary code or write files. Notification content is
+visible on-screen and may be logged by your notification daemon, so
+treat anything you ask Claude to surface accordingly.

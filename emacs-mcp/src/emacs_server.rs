@@ -1,11 +1,12 @@
 use rmcp::{
+    ServerHandler,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{ServerCapabilities, ServerInfo},
-    schemars, tool, tool_handler, tool_router, ServerHandler,
+    schemars, tool, tool_handler, tool_router,
 };
 use serde::Deserialize;
 
-use crate::emacs_client::EmacsClient;
+use crate::emacs_client::{EmacsClient, elisp_string};
 
 // ── Tool parameter structs ────────────────────────────────────────────────────
 
@@ -42,6 +43,7 @@ pub struct OpenFileParams {
 #[derive(Debug, Clone)]
 pub struct EmacsServer {
     emacs: EmacsClient,
+    #[allow(dead_code)]
     tool_router: ToolRouter<EmacsServer>,
 }
 
@@ -55,8 +57,14 @@ impl Default for EmacsServer {
 impl EmacsServer {
     /// Create a new server with a default [`EmacsClient`] and pre-built tool router.
     pub fn new() -> Self {
+        Self::with_client(EmacsClient::new())
+    }
+
+    /// Create a new server backed by a specific [`EmacsClient`] (e.g., one with
+    /// a custom `--socket-name`).
+    pub fn with_client(emacs: EmacsClient) -> Self {
         Self {
-            emacs: EmacsClient::new(),
+            emacs,
             tool_router: Self::tool_router(),
         }
     }
@@ -76,7 +84,11 @@ impl EmacsServer {
     /// List all open buffers.
     #[tool(description = "List all open buffers in Emacs")]
     async fn list_buffers(&self) -> String {
-        match self.emacs.eval("(mapcar #'buffer-name (buffer-list))").await {
+        match self
+            .emacs
+            .eval("(mapcar #'buffer-name (buffer-list))")
+            .await
+        {
             Ok(result) => result,
             Err(e) => format!("Error: {e}"),
         }
@@ -89,7 +101,10 @@ impl EmacsServer {
         Parameters(GetBufferParams { buffer_name }): Parameters<GetBufferParams>,
     ) -> String {
         let expr = match buffer_name {
-            Some(name) => format!(r#"(with-current-buffer "{name}" (buffer-string))"#),
+            Some(name) => format!(
+                "(with-current-buffer {} (buffer-string))",
+                elisp_string(&name)
+            ),
             None => "(buffer-string)".to_owned(),
         };
         match self.emacs.eval(&expr).await {
@@ -104,7 +119,7 @@ impl EmacsServer {
         &self,
         Parameters(OpenFileParams { path }): Parameters<OpenFileParams>,
     ) -> String {
-        let expr = format!(r#"(find-file "{path}")"#);
+        let expr = format!("(find-file {})", elisp_string(&path));
         match self.emacs.eval(&expr).await {
             Ok(_) => format!("Opened {path}"),
             Err(e) => format!("Error: {e}"),
@@ -125,11 +140,10 @@ impl EmacsServer {
 #[tool_handler]
 impl ServerHandler for EmacsServer {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
-            .with_instructions(
-                "Interact with a running Emacs instance. \
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
+            "Interact with a running Emacs instance. \
                  Emacs must have `(server-start)` active for tools to work."
-                    .to_owned(),
-            )
+                .to_owned(),
+        )
     }
 }

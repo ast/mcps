@@ -1,7 +1,8 @@
 use rmcp::{
+    ServerHandler,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{ServerCapabilities, ServerInfo},
-    schemars, tool, tool_handler, tool_router, ServerHandler,
+    schemars, tool, tool_handler, tool_router,
 };
 use serde::Deserialize;
 
@@ -17,7 +18,9 @@ pub struct NotifyParams {
     #[schemars(description = "Optional longer description shown in the notification body")]
     pub body: Option<String>,
 
-    #[schemars(description = "Urgency level: \"low\", \"normal\", or \"critical\". Defaults to normal.")]
+    #[schemars(
+        description = "Urgency level: \"low\", \"normal\", or \"critical\". Defaults to normal."
+    )]
     pub urgency: Option<String>,
 }
 
@@ -30,7 +33,14 @@ pub struct NotifyParams {
 #[derive(Debug, Clone)]
 pub struct NotifyServer {
     client: NotifyClient,
+    #[allow(dead_code)]
     tool_router: ToolRouter<NotifyServer>,
+}
+
+impl Default for NotifyServer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[tool_router]
@@ -43,7 +53,9 @@ impl NotifyServer {
     }
 
     /// Send a desktop notification.
-    #[tool(description = "Send a desktop notification with a summary and optional body and urgency level")]
+    #[tool(
+        description = "Send a desktop notification with a summary and optional body and urgency level"
+    )]
     fn notify(
         &self,
         Parameters(NotifyParams {
@@ -52,17 +64,21 @@ impl NotifyServer {
             urgency,
         }): Parameters<NotifyParams>,
     ) -> String {
-        let urgency_level = urgency.as_deref().and_then(|u| match u {
-            "low" => Some(Urgency::Low),
-            "normal" => Some(Urgency::Normal),
-            "critical" => Some(Urgency::Critical),
-            _ => None,
-        });
+        let urgency_level = match urgency.as_deref() {
+            None => None,
+            Some(u) => match u.to_ascii_lowercase().as_str() {
+                "low" => Some(Urgency::Low),
+                "normal" => Some(Urgency::Normal),
+                "critical" => Some(Urgency::Critical),
+                _ => {
+                    return format!(
+                        "Error: invalid urgency {u:?} (expected \"low\", \"normal\", or \"critical\")"
+                    );
+                }
+            },
+        };
 
-        match self
-            .client
-            .notify(&summary, body.as_deref(), urgency_level)
-        {
+        match self.client.notify(&summary, body.as_deref(), urgency_level) {
             Ok(()) => format!("Notification sent: {summary}"),
             Err(e) => format!("Error: {e}"),
         }
@@ -72,11 +88,10 @@ impl NotifyServer {
 #[tool_handler]
 impl ServerHandler for NotifyServer {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
-            .with_instructions(
-                "Send desktop notifications via D-Bus. \
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
+            "Send desktop notifications via D-Bus. \
                  Requires a running notification daemon such as Mako or dunst."
-                    .to_owned(),
-            )
+                .to_owned(),
+        )
     }
 }

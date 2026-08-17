@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -5,6 +7,8 @@ use serde::Deserialize;
 use crate::error::Error;
 
 const BASE_URL: &str = "https://opendata-download-metfcst.smhi.se";
+const USER_AGENT: &str = concat!("smhi-mcp/", env!("CARGO_PKG_VERSION"));
+const HTTP_TIMEOUT: Duration = Duration::from_secs(10);
 
 // ── API response types ────────────────────────────────────────────────────────
 
@@ -45,14 +49,25 @@ pub struct SmhiClient {
     http: reqwest::Client,
 }
 
+impl Default for SmhiClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SmhiClient {
     pub fn new() -> Self {
-        Self {
-            http: reqwest::Client::new(),
-        }
+        let http = reqwest::Client::builder()
+            .user_agent(USER_AGENT)
+            .timeout(HTTP_TIMEOUT)
+            .build()
+            .expect("reqwest client builds with default TLS backend");
+        Self { http }
     }
 
     pub async fn get_forecast(&self, lat: f32, lon: f32) -> Result<SmhiForecast> {
+        validate_coords(lat, lon)?;
+
         let url = format!(
             "{BASE_URL}/api/category/pmp3g/version/2/geotype/point/lon/{lon}/lat/{lat}/data.json"
         );
@@ -62,24 +77,40 @@ impl SmhiClient {
             .get(&url)
             .send()
             .await
-            .map_err(Error::Http)
             .context("sending SMHI request")?
             .error_for_status()
-            .map_err(Error::Http)
             .context("SMHI API returned error status")?
             .json::<SmhiForecast>()
             .await
-            .map_err(Error::Http)
             .context("deserializing SMHI response")?;
 
         Ok(forecast)
     }
 }
 
+fn validate_coords(lat: f32, lon: f32) -> Result<(), Error> {
+    if !lat.is_finite() || !(-90.0..=90.0).contains(&lat) {
+        return Err(Error::InvalidCoordinate(format!(
+            "latitude {lat} is out of range (expected -90..=90)"
+        )));
+    }
+    if !lon.is_finite() || !(-180.0..=180.0).contains(&lon) {
+        return Err(Error::InvalidCoordinate(format!(
+            "longitude {lon} is out of range (expected -180..=180)"
+        )));
+    }
+    Ok(())
+}
+
 // ── Wind direction helper ─────────────────────────────────────────────────────
 
 pub fn wind_direction_name(degrees: f32) -> &'static str {
-    match ((degrees + 22.5) as u32 / 45) % 8 {
+    if !degrees.is_finite() {
+        return "?";
+    }
+    let normalized = degrees.rem_euclid(360.0);
+    let index = ((normalized + 22.5) / 45.0) as u32 % 8;
+    match index {
         0 => "N",
         1 => "NE",
         2 => "E",
@@ -154,7 +185,7 @@ mod tests {
     }
 
     #[test]
-    fn wind_direction() {
+    fn wind_direction_cardinals() {
         assert_eq!(wind_direction_name(0.0), "N");
         assert_eq!(wind_direction_name(90.0), "E");
         assert_eq!(wind_direction_name(180.0), "S");
@@ -163,9 +194,32 @@ mod tests {
     }
 
     #[test]
+    fn wind_direction_handles_out_of_range() {
+        assert_eq!(wind_direction_name(360.0), "N");
+        assert_eq!(wind_direction_name(720.0), "N");
+        assert_eq!(wind_direction_name(-45.0), "NW");
+        assert_eq!(wind_direction_name(f32::NAN), "?");
+    }
+
+    #[test]
     fn weather_symbol_mapping() {
         assert_eq!(weather_symbol(1.0), "Clear sky");
         assert_eq!(weather_symbol(18.0), "Light rain");
         assert_eq!(weather_symbol(27.0), "Heavy snowfall");
+    }
+
+    #[test]
+    fn coord_validation_accepts_valid() {
+        assert!(validate_coords(57.7089, 11.9746).is_ok());
+        assert!(validate_coords(-90.0, -180.0).is_ok());
+        assert!(validate_coords(90.0, 180.0).is_ok());
+    }
+
+    #[test]
+    fn coord_validation_rejects_invalid() {
+        assert!(validate_coords(91.0, 0.0).is_err());
+        assert!(validate_coords(0.0, 181.0).is_err());
+        assert!(validate_coords(f32::NAN, 0.0).is_err());
+        assert!(validate_coords(0.0, f32::INFINITY).is_err());
     }
 }

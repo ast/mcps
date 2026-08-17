@@ -1,7 +1,8 @@
 use rmcp::{
+    ServerHandler,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{ServerCapabilities, ServerInfo},
-    schemars, tool, tool_handler, tool_router, ServerHandler,
+    schemars, tool, tool_handler, tool_router,
 };
 use serde::Deserialize;
 
@@ -25,7 +26,14 @@ pub struct ForecastParams {
 #[derive(Debug, Clone)]
 pub struct SmhiServer {
     client: SmhiClient,
+    #[allow(dead_code)]
     tool_router: ToolRouter<SmhiServer>,
+}
+
+impl Default for SmhiServer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[tool_router]
@@ -38,7 +46,9 @@ impl SmhiServer {
     }
 
     /// Get a weather forecast for a location.
-    #[tool(description = "Get an hourly weather forecast from SMHI for a given latitude/longitude. Returns temperature, wind, precipitation, and humidity — useful for deciding how to dress.")]
+    #[tool(
+        description = "Get an hourly weather forecast from SMHI for a given latitude/longitude. Returns temperature, wind, precipitation, and humidity — useful for deciding how to dress."
+    )]
     async fn get_forecast(
         &self,
         Parameters(ForecastParams { lat, lon, hours }): Parameters<ForecastParams>,
@@ -55,21 +65,23 @@ impl SmhiServer {
 }
 
 pub fn format_forecast(time_series: &[crate::smhi_client::TimeSeries], hours: usize) -> String {
-    use chrono::Timelike;
-
     let mut lines = Vec::new();
 
     for ts in time_series.iter().take(hours) {
-        let time = ts.valid_time;
-        let hour = time.hour();
-        let minute = ts.valid_time.minute();
+        let when = ts.valid_time.format("%a %d %b %H:%M UTC");
 
-        let temp = ts.param("t").map_or("?".to_string(), |v| format!("{v:.1}°C"));
-        let wind_speed = ts.param("ws").map_or("?".to_string(), |v| format!("{v:.1} m/s"));
+        let temp = ts
+            .param("t")
+            .map_or("?".to_string(), |v| format!("{v:.1}°C"));
+        let wind_speed = ts
+            .param("ws")
+            .map_or("?".to_string(), |v| format!("{v:.1} m/s"));
         let wind_dir = ts
             .param("wd")
             .map_or("?".to_string(), |v| wind_direction_name(v).to_string());
-        let humidity = ts.param("r").map_or("?".to_string(), |v| format!("{v:.0}%"));
+        let humidity = ts
+            .param("r")
+            .map_or("?".to_string(), |v| format!("{v:.0}%"));
         let precip = ts.param("pmean");
         let symbol = ts.param("Wsymb2").map(weather_symbol).unwrap_or("?");
 
@@ -79,7 +91,7 @@ pub fn format_forecast(time_series: &[crate::smhi_client::TimeSeries], hours: us
         };
 
         lines.push(format!(
-            "{hour:02}:{minute:02} UTC: {temp}, wind {wind_speed} {wind_dir}{precip_str}, humidity {humidity} — {symbol}"
+            "{when}: {temp}, wind {wind_speed} {wind_dir}{precip_str}, humidity {humidity} — {symbol}"
         ));
     }
 
@@ -93,13 +105,12 @@ pub fn format_forecast(time_series: &[crate::smhi_client::TimeSeries], hours: us
 #[tool_handler]
 impl ServerHandler for SmhiServer {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
-            .with_instructions(
-                "Provides hourly weather forecasts from SMHI (Swedish Meteorological and \
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
+            "Provides hourly weather forecasts from SMHI (Swedish Meteorological and \
                  Hydrological Institute). Use get_forecast with a latitude and longitude \
                  to get temperature, wind, precipitation, and humidity data."
-                    .to_owned(),
-            )
+                .to_owned(),
+        )
     }
 }
 

@@ -1,7 +1,11 @@
 [package]
 name = "smhi-mcp"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "MCP server that fetches Swedish weather forecasts from the SMHI public API"
 
 [dependencies]
 rmcp = { workspace = true }
@@ -13,5 +17,8 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 schemars = { workspace = true }
-reqwest = { version = "0.12", features = ["json"] }
-chrono = { version = "0.4", features = ["serde"] }
+reqwest = { workspace = true }
+chrono = { workspace = true }
+
+[lints]
+workspace = true

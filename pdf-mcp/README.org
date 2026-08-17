@@ -1,0 +1,94 @@
+#+title: pdf-mcp
+#+author: Albin Stigö
+#+options: toc:t
+
+An MCP (Model Context Protocol) server that opens PDFs in
+[[https://github.com/ahrm/sioyek][sioyek]] at a specific page or text location. Designed to complement a
+[[https://github.com/phiresky/ripgrep-all][ripgrep-all]] (=rga=) workflow: =rga= finds the relevant page in a PDF,
+this MCP brings it up on screen so you can visually confirm a detail
+before implementing against it.
+
+For building, installing, and registering with Claude Code, see the
+[[file:../README.org][main README]].
+
+* Prerequisites
+
+- [[https://github.com/ahrm/sioyek][sioyek]] on =PATH= (Arch: =pacman -S sioyek=, Debian/Ubuntu: =apt
+  install sioyek=, Nix: =nixpkgs.sioyek=, Flathub: =flatpak install
+  com.github.ahrm.sioyek=)
+- A graphical session (DISPLAY or Wayland) — sioyek is a GUI
+
+Sanity check:
+
+#+begin_src sh
+  sioyek --version
+#+end_src
+
+* Workflow
+
+The intended pattern is:
+
+1. Drop the PDFs into your repo (or anywhere under your home directory).
+2. Use =rga= (in Claude's =Bash= tool) to search them:
+   =rga "the phrase" docs/=
+3. Claude calls one of this server's tools to open the matching PDF.
+
+Because path lookup is the LLM's job, =pdf-mcp= itself doesn't depend
+on =rga= and doesn't read any config file.
+
+* Available tools
+
+| Tool                 | What it does                                                          |
+|----------------------+-----------------------------------------------------------------------|
+| =open_pdf=           | Open a PDF at a specific 1-indexed page                               |
+| =open_pdf_at_text=   | Open a PDF and place a visual mark on the line containing some text  |
+
+** Tool parameters
+
+*** =open_pdf=
+
+| Parameter | Type    | Required | Description                              |
+|-----------+---------+----------+------------------------------------------|
+| =path=    | string  | yes      | Absolute path to the PDF file            |
+| =page=    | integer | yes      | 1-indexed page number to jump to         |
+
+*** =open_pdf_at_text=
+
+| Parameter | Type    | Required | Description                                            |
+|-----------+---------+----------+--------------------------------------------------------|
+| =path=    | string  | yes      | Absolute path to the PDF file                          |
+| =text=    | string  | yes      | Snippet to locate; sioyek marks the matching line     |
+| =page=    | integer | no       | Optional 1-indexed page to restrict the text search to |
+
+* Behaviour
+
+- Sioyek is spawned with =--reuse-window=, so each call replaces the
+  current document instead of stacking new windows.
+- The MCP returns immediately — sioyek runs detached and survives the
+  MCP request's lifetime.
+- Paths must be absolute. Relative paths are rejected with an error.
+- Sioyek's stdout/stderr are redirected to =/dev/null= so Qt log
+  output cannot corrupt the MCP's JSON-RPC channel.
+
+* Example prompts
+
+#+begin_example
+Open /home/me/docs/postgres-manual.pdf to page 412.
+#+end_example
+
+#+begin_example
+I found "ON CONFLICT DO UPDATE" in docs/postgres-manual.pdf via rga —
+open it there so I can read the surrounding context.
+#+end_example
+
+#+begin_example
+Show me where "Section 7.3" appears in /home/me/papers/rfc9110.pdf.
+#+end_example
+
+* Security note
+
+=pdf-mcp= will spawn =sioyek= against any absolute path Claude provides
+— there is no doc-root allowlist by design. Treat the MCP as something
+that can open any file readable by your user, just as if you'd typed
+=sioyek <path>= in a terminal yourself. Sioyek itself never modifies
+the PDF; it only displays it.

@@ -1,11 +1,15 @@
+//! Entry point for the pdf-mcp server.
+//!
+//! Initialises tracing, creates a [`PdfServer`], and serves it over stdio
+//! using the MCP transport protocol.
+
 use anyhow::Result;
-use notify_mcp::notify_server::NotifyServer;
+use pdf_mcp::pdf_server::PdfServer;
 use rmcp::{ServiceExt, transport::stdio};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Log to stderr so stdout stays clean for the MCP stdio transport.
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
@@ -13,9 +17,9 @@ async fn main() -> Result<()> {
         .with_writer(std::io::stderr)
         .init();
 
-    tracing::info!("Starting notify-mcp server");
+    tracing::info!("Starting pdf-mcp server");
 
-    let service = NotifyServer::new().serve(stdio()).await?;
+    let service = PdfServer::new().serve(stdio()).await?;
     service.waiting().await?;
 
     Ok(())

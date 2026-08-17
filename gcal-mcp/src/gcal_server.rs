@@ -1,11 +1,12 @@
 use rmcp::{
+    ServerHandler,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{ServerCapabilities, ServerInfo},
-    schemars, tool, tool_handler, tool_router, ServerHandler,
+    schemars, tool, tool_handler, tool_router,
 };
 use serde::Deserialize;
 
-use crate::gcal_client::{CalEvent, CalendarConfig, GcalClient};
+use crate::gcal_client::{CalEvent, CalendarConfig, ConfigOutcome, GcalClient};
 
 // ── Tool parameter structs ────────────────────────────────────────────────────
 
@@ -22,16 +23,32 @@ pub struct ListEventsParams {
 pub struct GcalServer {
     client: GcalClient,
     calendars: Vec<CalendarConfig>,
+    #[allow(dead_code)]
     tool_router: ToolRouter<GcalServer>,
+}
+
+impl Default for GcalServer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[tool_router]
 impl GcalServer {
     pub fn new() -> Self {
-        let calendars = CalendarConfig::from_config_file().unwrap_or_else(|e| {
-            tracing::warn!("Failed to load config: {e:#}");
-            Vec::new()
-        });
+        let calendars = match CalendarConfig::load() {
+            Ok(ConfigOutcome::Loaded(c)) => c,
+            Ok(ConfigOutcome::Missing) => {
+                tracing::info!(
+                    "No gcal-mcp config found; create ~/.config/gcal-mcp/config.toml to enable"
+                );
+                Vec::new()
+            }
+            Err(e) => {
+                tracing::warn!("Failed to load gcal-mcp config: {e:#}");
+                Vec::new()
+            }
+        };
         Self {
             client: GcalClient::new(),
             calendars,
@@ -40,7 +57,9 @@ impl GcalServer {
     }
 
     /// List upcoming calendar events.
-    #[tool(description = "List upcoming Google Calendar events from all configured calendars. Returns event titles, times, and locations for the next N days. Configure calendars via the GCAL_ICAL_URLS environment variable.")]
+    #[tool(
+        description = "List upcoming Google Calendar events from all configured calendars. Returns event titles, times, and locations for the next N days. Recurring events are expanded. Configure via ~/.config/gcal-mcp/config.toml."
+    )]
     async fn list_events(
         &self,
         Parameters(ListEventsParams { days }): Parameters<ListEventsParams>,
@@ -59,13 +78,19 @@ pub fn format_events(events: &[CalEvent], days: u32) -> String {
         return format!("No upcoming events in the next {days} day(s).");
     }
 
+    let multiple_calendars = events
+        .iter()
+        .map(|e| &e.calendar)
+        .collect::<std::collections::HashSet<_>>()
+        .len()
+        > 1;
+
     let mut lines = Vec::new();
     let mut current_date = None;
 
     for event in events {
         let date = event.start.date_naive();
 
-        // Print a date header when the day changes.
         if current_date != Some(date) {
             current_date = Some(date);
             lines.push(format!("\n{}", date.format("%A, %B %-d")));
@@ -83,9 +108,7 @@ pub fn format_events(events: &[CalEvent], days: u32) -> String {
             line.push_str(&format!("  [{loc}]"));
         }
 
-        if events.iter().filter(|e| e.calendar == event.calendar).count() > 0
-            && events.iter().map(|e| &e.calendar).collect::<std::collections::HashSet<_>>().len() > 1
-        {
+        if multiple_calendars {
             line.push_str(&format!("  ({})", event.calendar));
         }
 
@@ -98,14 +121,13 @@ pub fn format_events(events: &[CalEvent], days: u32) -> String {
 #[tool_handler]
 impl ServerHandler for GcalServer {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
-            .with_instructions(
-                "Provides read-only access to Google Calendar events via private iCal feed URLs. \
-                 Use list_events to see upcoming events. Configure calendar feeds by setting \
-                 GCAL_ICAL_URLS to a comma-separated list of iCal URLs, optionally prefixed \
-                 with a name (e.g. \"Work=https://...,Personal=https://...\")."
-                    .to_owned(),
-            )
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
+            "Provides read-only access to Google Calendar events via private iCal feed URLs. \
+                 Use list_events to see upcoming events. Configure calendar feeds in \
+                 ~/.config/gcal-mcp/config.toml. Recurring events are expanded; floating-time \
+                 events are treated as UTC (best-effort)."
+                .to_owned(),
+        )
     }
 }
 
@@ -126,7 +148,6 @@ mod tests {
             start: Utc.with_ymd_and_hms(2024, 6, 3, hour, 0, 0).unwrap(),
             end: None,
             location: None,
-            description: None,
             all_day,
         }
     }
@@ -155,12 +176,26 @@ mod tests {
     }
 
     #[test]
-    fn format_multiple_calendars_shows_name() {
+    fn format_multiple_calendars_shows_both_names() {
         let events = vec![
             make_event("Work", "Standup", 9, false),
             make_event("Personal", "Gym", 7, false),
         ];
         let output = format_events(&events, 7);
-        assert!(output.contains("(Work)") || output.contains("(Personal)"));
+        assert!(output.contains("(Work)"), "missing (Work) in: {output}");
+        assert!(
+            output.contains("(Personal)"),
+            "missing (Personal) in: {output}"
+        );
+    }
+
+    #[test]
+    fn format_single_calendar_omits_calendar_name() {
+        let events = vec![
+            make_event("Work", "Standup", 9, false),
+            make_event("Work", "Lunch", 12, false),
+        ];
+        let output = format_events(&events, 7);
+        assert!(!output.contains("(Work)"), "shouldn't tag: {output}");
     }
 }

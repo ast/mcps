@@ -62,10 +62,7 @@ fn weather_symbol_unknown_code() {
 
 #[test]
 fn param_extraction_present() {
-    let ts = make_ts(
-        Utc::now(),
-        &[("t", 12.5), ("ws", 4.2), ("r", 70.0)],
-    );
+    let ts = make_ts(Utc::now(), &[("t", 12.5), ("ws", 4.2), ("r", 70.0)]);
     assert_eq!(ts.param("t"), Some(12.5));
     assert_eq!(ts.param("ws"), Some(4.2));
     assert_eq!(ts.param("r"), Some(70.0));

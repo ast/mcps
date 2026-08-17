@@ -1,75 +1,168 @@
 #+TITLE: mcps
+#+AUTHOR: Albin Stigö
 #+DESCRIPTION: A collection of MCP servers written in Rust
+#+OPTIONS: toc:t
 
-* Overview
-
-A Rust workspace containing independent [[https://modelcontextprotocol.io/][MCP]] (Model Context Protocol)
-servers. Each server exposes a focused set of tools that LLM clients
-(such as [[https://claude.ai/code][Claude Code]]) can invoke over the standard MCP stdio
-transport.
+A Rust workspace of independent [[https://modelcontextprotocol.io/][MCP]] (Model Context Protocol) servers
+for use with [[https://claude.ai/code][Claude Code]] and other MCP-compatible LLM clients. Each
+server speaks the standard MCP stdio transport.
 
 * Servers
 
-| Server       | Description                                               |
-|--------------+-----------------------------------------------------------|
-| =emacs-mcp=  | Interact with a running Emacs instance via =emacsclient=  |
-| =gcal-mcp=   | Read-only access to Google Calendar events via iCal       |
-| =notify-mcp= | Send Linux desktop notifications via D-Bus (notify-rust)  |
-| =smhi-mcp=   | Fetch Swedish weather forecasts from the SMHI public API  |
+| Server                                | Description                                                |
+|---------------------------------------+------------------------------------------------------------|
+| [[file:emacs-mcp/README.org][=emacs-mcp=]]  | Interact with a running Emacs instance via =emacsclient=   |
+| [[file:gcal-mcp/README.org][=gcal-mcp=]]    | Read-only access to Google Calendar events via iCal URLs   |
+| [[file:notify-mcp/README.org][=notify-mcp=]] | Send Linux desktop notifications via D-Bus (Mako, dunst)  |
+| [[file:pdf-mcp/README.org][=pdf-mcp=]]    | Open PDFs in sioyek at a specific page or text location  |
+| [[file:smhi-mcp/README.org][=smhi-mcp=]]    | Fetch Swedish weather forecasts from the SMHI public API |
+
+Each linked README covers prerequisites, configuration, available
+tools, and example prompts for that server.
+
+* Prerequisites
+
+- [[https://www.rust-lang.org/tools/install][Rust]] (stable toolchain, edition 2024)
+- [[https://github.com/casey/just][just]] command runner
+
+#+begin_src sh
+  cargo install just
+#+end_src
 
 * Building
 
-All crates are built with Cargo. Rust edition 2024 is used throughout.
+All crates live in a single Cargo workspace.
 
 #+begin_src sh
-# Build all servers
-cargo build --release
+  # Build everything (release mode)
+  just build-release
 
-# Build a single server
-cargo build -p emacs-mcp --release
+  # Build a single server
+  just build-one smhi-mcp
 #+end_src
 
-* Testing
+Equivalent =cargo= invocations work as well — see =justfile= for the
+exact commands.
+
+* Testing and linting
 
 #+begin_src sh
-# Run all tests
-cargo test
+  # All offline tests
+  just test
 
-# Run tests for a specific server
-cargo test -p smhi-mcp
+  # All tests including ignored ones (need live Emacs, mako, network)
+  just test-all
+
+  # Clippy with -D warnings + rustfmt --check + test
+  just ci
 #+end_src
 
-* Linting and formatting
+* Installing the binaries
+
+Install every server binary to =~/.cargo/bin/=:
 
 #+begin_src sh
-cargo clippy
-cargo fmt
+  just install-all
 #+end_src
+
+Or install a single one:
+
+#+begin_src sh
+  just install smhi-mcp
+#+end_src
+
+Uninstall the same way:
+
+#+begin_src sh
+  just uninstall-all
+  just uninstall smhi-mcp
+#+end_src
+
+* Adding to Claude Code
+
+Register every server with Claude Code at user scope (available across
+all projects). =just claude-register-all= depends on =install-all=, so
+it will build and install the binaries first if needed:
+
+#+begin_src sh
+  just claude-register-all
+#+end_src
+
+This runs, for each server, the equivalent of:
+
+#+begin_src sh
+  claude mcp add --transport stdio --scope user <name> -- <binary>
+#+end_src
+
+Register a single server (also installs the matching crate first):
+
+#+begin_src sh
+  just claude-register smhi
+#+end_src
+
+Unregister the same way:
+
+#+begin_src sh
+  just claude-unregister-all
+  just claude-unregister smhi
+#+end_src
+
+** A different scope
+
+=just claude-register= always uses =--scope user=. If you want a
+different scope (=local= for this project only, =project= for sharing
+via =.mcp.json=), invoke =claude mcp add= directly:
+
+#+begin_src sh
+  # Project scope (shared with team via .mcp.json)
+  claude mcp add --transport stdio --scope project smhi -- smhi-mcp
+
+  # Local scope (this project only)
+  claude mcp add --transport stdio smhi -- smhi-mcp
+#+end_src
+
+** Verifying
+
+#+begin_src sh
+  claude mcp list
+  claude mcp get smhi
+#+end_src
+
+Inside a Claude session you can check status with the =/mcp= slash
+command.
 
 * Architecture
 
-Each server follows a three-layer pattern:
+Each server follows the same three-layer pattern:
 
-1. =main.rs= -- Tokio runtime and tracing setup, stdio transport.
-2. =*_server.rs= -- Implements =ServerHandler= from the =rmcp= SDK;
+1. =main.rs= — Tokio runtime and tracing setup, stdio transport.
+2. =*_server.rs= — Implements =ServerHandler= from the =rmcp= SDK;
    defines MCP tools via =#[tool_router]= / =#[tool]= macros.
-3. =*_client.rs= -- Encapsulates the actual work (subprocess calls,
+3. =*_client.rs= — Encapsulates the actual work (subprocess calls,
    HTTP requests, D-Bus).
+
+Tool parameters are =serde::Deserialize= + =schemars::JsonSchema=
+structs injected via =Parameters(p)=. Errors use =thiserror= for enum
+definitions and =anyhow= for propagation; tool handler methods return
+formatted error strings rather than propagating MCP errors.
 
 * Key dependencies
 
-| Crate         | Purpose                      |
-|---------------+------------------------------|
-| =rmcp=        | Official Rust MCP SDK        |
-| =tokio=       | Async runtime                |
-| =serde=       | Serialization                |
-| =schemars=    | JSON Schema for tool params  |
-| =thiserror=   | Error enum definitions       |
-| =anyhow=      | Error propagation            |
-| =tracing=     | Logging                      |
-| =reqwest=     | HTTP client (smhi, gcal)     |
-| =notify-rust= | D-Bus notifications (notify) |
-| =chrono=      | Date/time (smhi, gcal)       |
+| Crate          | Purpose                              |
+|----------------+--------------------------------------|
+| =rmcp=         | Official Rust MCP SDK                |
+| =tokio=        | Async runtime                        |
+| =serde=        | Serialization                        |
+| =schemars=     | JSON Schema for tool parameters      |
+| =thiserror=    | Error enum definitions               |
+| =anyhow=       | Error propagation                    |
+| =tracing=      | Logging (stderr only — stdout is MCP)|
+| =reqwest=      | HTTP client (smhi, gcal)             |
+| =notify-rust=  | D-Bus notifications (notify)         |
+| =chrono=       | Date/time                            |
+| =chrono-tz=    | IANA timezone lookup (gcal)          |
+| =rrule=        | Recurring event expansion (gcal)     |
+| =icalendar=    | iCal feed parsing (gcal)             |
 
 * License
 

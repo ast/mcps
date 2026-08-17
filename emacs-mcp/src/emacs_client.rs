@@ -51,3 +51,37 @@ impl Default for EmacsClient {
         Self::new()
     }
 }
+
+/// Format a Rust string as an Emacs Lisp string literal, escaping `\` and `"`.
+///
+/// Use this whenever interpolating untrusted input into elisp source, so that
+/// a stray quote in a buffer name or path cannot escape the string and inject
+/// arbitrary code.
+pub fn elisp_string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '\\' | '"' => {
+                out.push('\\');
+                out.push(c);
+            }
+            _ => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn elisp_string_escapes_quote_and_backslash() {
+        assert_eq!(elisp_string("hello"), r#""hello""#);
+        assert_eq!(elisp_string(r#"a"b"#), r#""a\"b""#);
+        assert_eq!(elisp_string(r"a\b"), r#""a\\b""#);
+        assert_eq!(elisp_string(r#""#), r#""""#);
+    }
+}
