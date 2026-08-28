@@ -78,6 +78,53 @@ Uninstall the same way:
   just uninstall smhi-mcp
 #+end_src
 
+* Nix / NixOS
+
+The repo is a flake. All five binaries come out of a single derivation,
+built from the committed =Cargo.lock= (see =nix/package.nix=).
+
+#+begin_src sh
+  # Build; binaries land in ./result/bin/
+  nix build
+
+  # Dev shell with the exact toolchain and native deps the package uses
+  nix develop
+
+  # Format the Nix files (nixfmt needs explicit paths, not a directory)
+  nix fmt flake.nix nix/package.nix
+#+end_src
+
+The flake exposes =packages.x86_64-linux.mcps= and an
+=overlays.default= that adds =pkgs.mcps=. To consume it from a NixOS
+flake, add the input:
+
+#+begin_src nix
+  mcps = {
+    url = "github:ast/mcps";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
+#+end_src
+
+register the overlay in any NixOS module:
+
+#+begin_src nix
+  { inputs, ... }:
+  {
+    nixpkgs.overlays = [ inputs.mcps.overlays.default ];
+  }
+#+end_src
+
+and install it wherever packages are declared (=home.packages= works
+because home-manager runs with =useGlobalPkgs = true=):
+
+#+begin_src nix
+  home.packages = with pkgs; [ mcps ];
+#+end_src
+
+Note: =rmcp= is a git dependency, so bumping its rev in =Cargo.toml=
+means refreshing =cargoLock.outputHashes= in =nix/package.nix=. The
+command to regenerate the hash is in a comment there.
+
 * Adding to Claude Code
 
 Register every server with Claude Code at user scope (available across
